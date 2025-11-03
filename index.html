@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI 졸음 감지 & 출석 시스템</title>
+
+  <!-- 얼굴 인식 라이브러리 (CDN) -->
+  <script defer src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
+
+  <style>
+    body {
+      font-family: "Noto Sans KR", sans-serif;
+      background-color: #f5f7fa;
+      margin: 0;
+      padding: 20px;
+    }
+    h1 {
+      text-align: center;
+      color: #004aad;
+    }
+    #camera-container {
+      text-align: center;
+      margin: 20px 0;
+    }
+    video {
+      border: 3px solid #004aad;
+      border-radius: 12px;
+      width: 480px;
+      height: 360px;
+    }
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+    .section {
+      background: #fff;
+      border-radius: 12px;
+      padding: 20px;
+      margin: 20px auto;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      max-width: 900px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: center;
+    }
+    th {
+      background: #004aad;
+      color: #fff;
+    }
+    .sleepy {
+      background-color: #fff3cd;
+    }
+    .absent {
+      color: red;
+    }
+    #status {
+      text-align: center;
+      font-size: 18px;
+      color: #444;
+    }
+  </style>
+</head>
+<body>
+  <h1>AI 졸음 감지 & 출석 시스템</h1>
+
+  <div id="camera-container">
+    <video id="video" autoplay muted></video>
+    <div id="status">모델 불러오는 중...</div>
+  </div>
+
+  <div class="section">
+    <h2>📋 학생 명단 (9학년 3반)</h2>
+    <table id="studentTable">
+      <thead>
+        <tr>
+          <th>번호</th>
+          <th>이름</th>
+          <th>상태</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <script>
+    // 1️⃣ 학생 명단
+    const students = [
+      "고은지","권연서","김가남","김건우","김나연","김현중","김형민","김효민","남시은",
+      "박찬서","박하율","박호열","성하윤","신주아","신채아","심인성","양지우","이민호",
+      "이성아","이소이","이학현","장윤서(전출)","정예은","정윤호","정지후","정태윤",
+      "조동호","조수민","조현아","최재민","최재성","허민","허승원","홍성민","강연두"
+    ];
+
+    const tableBody = document.querySelector("#studentTable tbody");
+    students.forEach((name, index) => {
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${index + 1}</td>
+        <td>${name}</td>
+        <td>${name.includes("전출") ? "<span class='absent'>전출</span>" : "미출석"}</td>
+      `;
+      tableBody.appendChild(row);
+    });
+
+    // 2️⃣ 얼굴 인식 모델 로드
+    const video = document.getElementById("video");
+    const status = document.getElementById("status");
+
+    Promise.all([
+      faceapi.nets.tinyFaceDetector.loadFromUri("https://cdn.jsdelivr.net/npm/face-api.js/weights"),
+    ]).then(startVideo);
+
+    function startVideo() {
+      navigator.mediaDevices.getUserMedia({ video: {} })
+        .then((stream) => {
+          video.srcObject = stream;
+          status.textContent = "카메라 연결 완료 ✅ (얼굴 인식 중)";
+        })
+        .catch((err) => {
+          console.error(err);
+          status.textContent = "카메라 접근 실패 ❌";
+        });
+    }
+
+    // 3️⃣ 얼굴 감지 & 출석 표시
+    video.addEventListener("play", () => {
+      const interval = setInterval(async () => {
+        const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions());
+        const count = detections.length;
+
+        // 감지된 얼굴 수에 따라 랜덤 학생을 출석 처리
+        if (count > 0) {
+          const random = Math.floor(Math.random() * students.length);
+          const row = tableBody.rows[random];
+          if (!students[random].includes("전출")) {
+            row.cells[2].textContent = "출석";
+            row.classList.remove("sleepy");
+          }
+        }
+
+        // 졸음 감지 (랜덤 시뮬레이션)
+        if (Math.random() < 0.2) {
+          const sleepyIndex = Math.floor(Math.random() * students.length);
+          const row = tableBody.rows[sleepyIndex];
+          if (!students[sleepyIndex].includes("전출")) {
+            row.cells[2].textContent = "졸음 감지 🚨";
+            row.classList.add("sleepy");
+          }
+        }
+      }, 3000);
+    });
+  </script>
+</body>
+</html>
