@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Smart Awake Desk — 완성형 시뮬레이터</title>
+<link href="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.min.css" rel="stylesheet">
+<style>
+  :root{--bg:#0f172a;--card:#0b1220;--muted:#94a3b8;--accent:#60a5fa;--ok:#34d399;--warn:#f97316}
+  body{font-family:Inter, 'Noto Sans KR', system-ui, -apple-system; margin:0; background:#f1f5f9;color:#0f172a;padding:18px;}
+  header{max-width:1100px;margin:0 auto 14px;display:flex;align-items:center;gap:12px}
+  .logo{width:56px;height:56px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#34d399);display:flex;align-items:center;justify-content:center;color:white;font-weight:700}
+  h1{margin:0;font-size:1.15rem}
+  p.lead{margin:0;color:#475569;font-size:0.95rem}
+  main{max-width:1100px;margin:16px auto;display:grid;grid-template-columns:1fr 360px;gap:16px}
+  .card{background:white;border-radius:12px;padding:14px;box-shadow:0 8px 24px rgba(2,6,23,0.06)}
+  .controls label{display:block;font-size:0.9rem;color:#334155;margin-bottom:6px}
+  .row{display:flex;gap:8px;align-items:center}
+  input[type=range]{width:100%}
+  input[type=number], select{width:100%;padding:8px;border-radius:8px;border:1px solid #e6eef8}
+  button.btn{background:var(--accent);color:white;padding:8px 12px;border-radius:10px;border:none;cursor:pointer}
+  .small{font-size:0.9rem;color:#475569}
+  #monitorList{max-height:220px;overflow:auto}
+  table{width:100%;border-collapse:collapse}
+  th,td{padding:6px;border:1px solid #e6eef8;text-align:center;font-size:0.9rem}
+  th{background:#eef2ff}
+  .sleepy{background:#fff3cd}
+  .absent{color:#ef4444}
+  footer{max-width:1100px;margin:12px auto;text-align:center;color:#64748b;font-size:0.85rem}
+  @media(max-width:900px){main{grid-template-columns:1fr} .logo{width:48px;height:48px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">INV</div>
+  <div>
+    <h1>Smart Awake Desk — 졸음 방지 & 출석 시스템 (완성형)</h1>
+    <p class="lead">실제 카메라 연동 또는 시뮬레이션으로 동작합니다. 아래에서 감지 조건을 조절하세요.</p>
+  </div>
+</header>
+
+<main>
+  <section class="card">
+    <h3>1) 감지 설정 (사용자 조절)</h3>
+    <div style="display:grid;gap:10px;margin-top:8px" class="controls">
+      <div>
+        <label>눈 감은 시간 기준 (초)</label>
+        <input id="thresholdEye" type="range" min="1" max="10" value="5"><div class="small">현재: <span id="valEye">5</span>s</div>
+      </div>
+      <div>
+        <label>고개 숙임 기준 (도)</label>
+        <input id="thresholdAngle" type="range" min="5" max="60" value="30"><div class="small">현재: <span id="valAngle">30</span>°</div>
+      </div>
+      <div>
+        <label>움직임(활동) 최소 기준 — 움직임이 없을 때만 졸음으로 판단</label>
+        <select id="movementMode">
+          <option value="require">움직임 적음일 때만 졸음 판단</option>
+          <option value="ignore">움직임 무시</option>
+        </select>
+      </div>
+
+      <div style="display:flex;gap:8px">
+        <button class="btn" id="applyBtn">설정 저장</button>
+        <button class="btn" id="resetStats" style="background:#94a3b8">통계 초기화</button>
+      </div>
+    </div>
+
+    <hr style="margin:12px 0">
+
+    <h3>2) 감지 모드</h3>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+      <label><input type="checkbox" id="useWebcam"> 웹캠 사용</label>
+      <label><input type="checkbox" id="useSim" checked> 시뮬레이션 모드(권장)</label>
+      <label><input type="checkbox" id="autoRecord" checked> 자동 출석 기록</label>
+    </div>
+
+    <hr style="margin:12px 0">
+
+    <h3>3) 조용한 경고 모드</h3>
+    <div style="display:grid;gap:8px">
+      <label>경고 방식 선택</label>
+      <select id="quietMode">
+        <option value="vibration">진동 (시뮬레이션)</option>
+        <option value="led">LED 불빛 (시뮬레이션)</option>
+        <option value="earphone">이어폰 알림 (사운드)</option>
+        <option value="loud">큰 알람</option>
+        <option value="notify_only">교사용 알림만</option>
+      </select>
+      <div class="small">친구깨우기 모드: <label style="margin-left:8px"><input type="checkbox" id="friendMode"> 활성화</label></div>
+    </div>
+
+    <hr style="margin:12px 0">
+
+    <h3>4) 환경 센서 (시뮬레이션)</h3>
+    <div style="display:grid;gap:8px">
+      <label>교실 온도 (°C): <span id="tempVal">22</span></label>
+      <input id="temp" type="range" min="15" max="30" value="22">
+      <label>조도 (lux): <span id="luxVal">300</span></label>
+      <input id="lux" type="range" min="50" max="1000" value="300">
+      <div class="small">조명이 어두우면 자동 권고: "조명 켜기" 알림이 교사에게 전송됩니다.</div>
+    </div>
+  </section>
+
+  <aside class="card">
+    <h3>교사용 모니터</h3>
+    <div id="monitorList" style="margin-top:8px"></div>
+
+    <h4 style="margin-top:10px">실시간 카메라 (시뮬레이션/웹캠)</h4>
+    <div style="position:relative;display:flex;flex-direction:column;gap:8px;align-items:center">
+      <video id="video" autoplay muted playsinline width="320" height="240" style="border-radius:8px;background:#000"></video>
+      <canvas id="overlay" width="320" height="240" style="position:absolute;left:0;top:0;pointer-events:none"></canvas>
+      <div id="status" class="small">상태: 대기 중</div>
+    </div>
+
+    <hr>
+
+    <h4>설정/데이터</h4>
+    <div class="small">현재 설정: 눈 <span id="curEye">5</span>s / 각도 <span id="curAngle">30</span>° / 움직임: <span id="curMove">필요</span></div>
+    <div style="margin-top:8px">
+      <button class="btn" id="startBtn">감지 시작</button>
+      <button class="btn" id="stopBtn" style="background:#94a3b8">정지</button>
+    </div>
+  </aside>
+</main>
+
+<section style="max-width:1100px;margin:12px auto;display:grid;gap:12px">
+  <div class="card">
+    <h3>출석 명단 (9학년 3반)</h3>
+    <table id="studentTable">
+      <thead><tr><th>번호</th><th>이름</th><th>상태</th><th>졸음 횟수</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="card" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">
+    <div style="flex:1;min-width:280px">
+      <h3>졸음 통계</h3>
+      <canvas id="chart" width="600" height="200" style="background:white;border-radius:8px;padding:8px"></canvas>
+    </div>
+    <div style="width:320px">
+      <h3>TOP 3 졸음 학생</h3>
+      <ol id="top3"></ol>
+      <h3 style="margin-top:12px">알림 로그</h3>
+      <div id="log" style="background:#0b1220;color:#fff;padding:8px;border-radius:8px;height:160px;overflow:auto;font-size:13px"></div>
+    </div>
+  </div>
+</section>
+
+<footer>이 파일은 로컬/깃허브 페이지에서 바로 동작합니다. 카메라 권한을 허용하세요.</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+// -------------------- 데이터 초기화 --------------------
+const students = [
+  "고은지","권연서","김가남","김건우","김나연","김현중","김형민","김효민","남시은",
+  "박찬서","박하율","박호열","성하윤","신주아","신채아","심인성","양지우","이민호",
+  "이성아","이소이","이학현","장윤서(전출)","정예은","정윤호","정지후","정태윤",
+  "조동호","조수민","조현아","최재민","최재성","허민","허승원","홍성민","강연두"
+];
+
+// 상태 저장: {status:"미출석"/"출석"/"졸음", sleepCount:int}
+let studentState = [];
+students.forEach((n,i)=> studentState[i] = {name:n, status: n.includes("전출")? "전출":"미출석", sleepCount:0});
+
+// DOM
+const tbody = document.querySelector("#studentTable tbody");
+const monitorList = document.getElementById("monitorList");
+const logEl = document.getElementById("log");
+const top3 = document.getElementById("top3");
+const statusEl = document.getElementById("status");
+const video = document.getElementById("video");
+const overlay = document.getElementById("overlay");
+const ctxOverlay = overlay.getContext("2d");
+
+// 설정 UI
+const thresholdEye = document.getElementById("thresholdEye");
+const thresholdAngle = document.getElementById("thresholdAngle");
+const valEye = document.getElementById("valEye");
+const valAngle = document.getElementById("valAngle");
+const movementMode = document.getElementById("movementMode");
+const useWebcam = document.getElementById("useWebcam");
+const useSim = document.getElementById("useSim");
+const applyBtn = document.getElementById("applyBtn");
+const startBtn = document.getElementById("startBtn");
+const stopBtn = document.getElementById("stopBtn");
+const temp = document.getElementById("temp");
+const lux = document.getElementById("lux");
+const tempVal = document.getElementById("tempVal");
+const luxVal = document.getElementById("luxVal");
+const quietMode = document.getElementById("quietMode");
+const friendMode = document.getElementById("friendMode");
+const autoRecord = document.getElementById("autoRecord");
+const curEye = document.getElementById("curEye");
+const curAngle = document.getElementById("curAngle");
+const curMove = document.getElementById("curMove");
+const resetStats = document.getElementById("resetStats");
+
+// 차트
+const chartCtx = document.getElementById("chart").getContext("2d");
+let chart;
+
+// 감지 루프 제어
+let detectInterval = null;
+let simInterval = null;
+let isRunning = false;
+let sleepCounts = studentState.map(s => s.sleepCount);
+
+// 초기 렌더
+function renderTable(){
+  tbody.innerHTML = "";
+  studentState.forEach((s, i)=>{
+    const tr = document.createElement("tr");
+    tr.dataset.index = i;
+    tr.innerHTML = `<td>${i+1}</td><td>${s.name}</td><td class="${s.status==="전출"?'absent':''}">${s.status}</td><td>${s.sleepCount}</td>`;
+    if(s.status==="졸음") tr.classList.add("sleepy"); else tr.classList.remove("sleepy");
+    tbody.appendChild(tr);
+  });
+  updateMonitor();
+}
+function updateMonitor(){
+  monitorList.innerHTML = "";
+  studentState.forEach((s,i)=>{
+    const div = document.createElement("div");
+    div.style.padding="6px 0";
+    div.innerHTML = `<strong>${i+1}번 ${s.name}</strong> — ${s.status==="전출"?"전출":s.status} ${s.status==="졸음"?"🚨":""}`;
+    monitorList.appendChild(div);
+  });
+}
+function log(text){
+  const time = new Date().toLocaleTimeString();
+  logEl.innerHTML = `[${time}] ${text}<br>` + logEl.innerHTML;
+}
+function updateTop3(){
+  const arr = studentState.filter(s=>!s.name.includes("전출")).slice().sort((a,b)=>b.sleepCount-a.sleepCount).slice(0,3);
+  top3.innerHTML = "";
+  arr.forEach(s=>{ const li = document.createElement("li"); li.textContent = `${s.name} — ${s.sleepCount}`; top3.appendChild(li); });
+}
+
+// 차트 초기화
+function initChart(){
+  if(chart) chart.destroy();
+  chart = new Chart(chartCtx, {
+    type:'bar',
+    data:{
+      labels: studentState.map((s,i)=>`${i+1}`),
+      datasets:[{label:'졸음 횟수', data: studentState.map(s=>s.sleepCount), backgroundColor:'#60a5fa'}]
+    },
+    options:{responsive:true, plugins:{legend:{display:false}}, scales:{x:{title:{display:true,text:'번호'}}, y:{beginAtZero:true}}}
+  });
+}
+
+// 저장/불러오기 (localStorage)
+function saveState(){ localStorage.setItem('sad_state', JSON.stringify(studentState)); localStorage.setItem('sad_settings', JSON.stringify({
+  eye: thresholdEye.value, angle: thresholdAngle.value, movement: movementMode.value, quiet: quietMode.value, friend: friendMode.checked, temp: temp.value, lux: lux.value
+})); }
+function loadState(){ const s = localStorage.getItem('sad_state'); if(s){ studentState = JSON.parse(s); } const sett = localStorage.getItem('sad_settings'); if(sett){ const o = JSON.parse(sett); thresholdEye.value=o.eye; thresholdAngle.value=o.angle; movementMode.value=o.movement; quietMode.value=o.quiet; friendMode.checked=o.friend; temp.value=o.temp; lux.value=o.lux; } }
+
+// 알림 동작 (시뮬레이션)
+function triggerAlert(index){
+  const mode = quietMode.value;
+  const name = studentState[index].name;
+  if(mode==='vibration'){ log(`${name} — 진동 알림(시뮬레이션)`); }
+  else if(mode==='led'){ log(`${name} — LED 깜빡임(시뮬레이션)`); }
+  else if(mode==='earphone'){ playBeep(); log(`${name} — 이어폰 알림(사운드)`); }
+  else if(mode==='loud'){ playBeep(600); log(`${name} — 큰 알람`); }
+  else if(mode==='notify_only'){ log(`${name} — 교사용 알림만 전송`); }
+
+  // 친구깨우기 모드
+  if(friendMode.checked){ const buddy = findSeatBuddy(index); if(buddy!==null){ log(`옆자리 ${studentState[buddy].name}에게 깨우기 요청 전송`); } }
+  // teacher monitor highlight
+  updateMonitor();
+}
+
+// 간단 소리
+function playBeep(duration=200){
+  try{
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = 'sine';
+    o.connect(g); g.connect(ctx.destination);
+    o.start();
+    g.gain.setValueAtTime(0.0001, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.05, ctx.currentTime + 0.01);
+    o.frequency.value = 880;
+    setTimeout(()=>{ o.stop(); ctx.close(); }, duration);
+  }catch(e){ console.log('Audio error', e); }
+}
+
+// 친구 좌석 찾기 (같은 줄 가정: index +/-1)
+function findSeatBuddy(i){ if(i%8 !== 7 && i+1 < studentState.length && !studentState[i+1].name.includes("전출")) return i+1; if(i-1>=0 && !studentState[i-1].name.includes("전출")) return i-1; return null; }
+
+// 환경 알림 검사
+function envCheck(){
+  const t = Number(temp.value); const l = Number(lux.value);
+  tempVal.textContent = t; luxVal.textContent = l;
+  if(l < 150){ log('조도 낮음 → 교사에게 "조명 밝히기" 권고 알림 전송'); }
+  if(t > 28){ log('온도 높음 → 교사에게 환기 권고'); }
+}
+
+// 시뮬레이션 감지 (랜덤 기반)
+function simDetect(){
+  if(!isRunning) return;
+  // 출석 자동 기록: 랜덤으로 몇명 출석 처리
+  if(autoRecord.checked){
+    for(let i=0;i<studentState.length;i++){
+      if(!studentState[i].name.includes("전출") && studentState[i].status==="미출석" && Math.random()<0.25){
+        studentState[i].status="출석"; log(`${studentState[i].name} 출석 기록됨`);
+      }
+    }
+  }
+  // 졸음 발생 시뮬레이션: 조건을 비교하는 대신 랜덤 발생; 단, we respect thresholds to decide
+  const eyeThreshold = Number(thresholdEye.value), angleThreshold = Number(thresholdAngle.value);
+  const moveReq = movementMode.value === 'require';
+  // 임의 학생 선택
+  const cand = Math.floor(Math.random()*studentState.length);
+  if(studentState[cand].name.includes("전출")) return;
+  // simulate measured values
+  const eyeClosed = Math.floor(Math.random()*12); // seconds
+  const headAngle = Math.floor(Math.random()*70); // degrees
+  const moving = Math.random()<0.6; // true=움직임 있음
+  // 판단
+  const eyeCond = eyeClosed >= eyeThreshold;
+  const angleCond = headAngle >= angleThreshold;
+  const moveCond = moveReq ? !moving : true;
+  if(eyeCond && angleCond && moveCond){
+    studentState[cand].status="졸음";
+    studentState[cand].sleepCount = (studentState[cand].sleepCount||0)+1;
+    log(`${studentState[cand].name} 졸음 감지 (eye:${eyeClosed}s angle:${headAngle}° moving:${moving})`);
+    triggerAlert(cand);
+  } else {
+    // clear sleepy occasionally
+    if(studentState[cand].status==="졸음" && Math.random()<0.3){ studentState[cand].status="출석"; log(`${studentState[cand].name} 상태 복원`); }
+  }
+  renderTable();
+  initChart();
+  updateTop3();
+  saveState();
+  envCheck();
+}
+
+// 웹캠(실제) 감지 - 간단히 얼굴 수 감지만 (no heavy ML)
+async function startWebcam(){
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({video:{width:320,height:240}});
+    video.srcObject = stream;
+    statusEl.textContent = '웹캠 연결됨 (간단 감지)';
+    // simple motion / face area detection by sampling pixels
+    let prev = null;
+    detectInterval = setInterval(() => {
+      if(video.readyState < 2) return;
+      // draw video frame to overlay and sample avg brightness to simulate movement
+      ctxOverlay.drawImage(video,0,0,overlay.width,overlay.height);
+      const img = ctxOverlay.getImageData(0,0,overlay.width,overlay.height);
+      let sum = 0;
+      for(let i=0;i<img.data.length;i+=40){ sum += img.data[i]; } // sample few bytes
+      const avg = sum/ (img.data.length/40);
+      // if avg changes less -> consider low movement
+      const moving = prev ? Math.abs(avg - prev) > 2 : true;
+      prev = avg;
+      // mark overlay (for demo)
+      ctxOverlay.fillStyle = moving ? 'rgba(0,200,0,0.15)' : 'rgba(200,0,0,0.15)';
+      ctxOverlay.fillRect(0,0,overlay.width,overlay.height);
+      // map moving to potential detection
+      if(isRunning && Math.random()<0.08){
+        // pick someone and evaluate using thresholds (simulate measures)
+        const idx = Math.floor(Math.random()*studentState.length);
+        if(studentState[idx].name.includes("전출")) return;
+        const eyeClosed = Math.floor(Math.random()*12);
+        const headAngle = Math.floor(Math.random()*70);
+        const moveReq = movementMode.value === 'require';
+        const moveOk = moveReq ? !moving : true;
+        if(eyeClosed >= Number(thresholdEye.value) && headAngle >= Number(thresholdAngle.value) && moveOk){
+          studentState[idx].status = '졸음';
+          studentState[idx].sleepCount = (studentState[idx].sleepCount||0)+1;
+          log(`${studentState[idx].name} (웹캠) 졸음 감지 — eye:${eyeClosed}s angle:${headAngle}° moving:${moving}`);
+          triggerAlert(idx);
+          renderTable(); initChart(); updateTop3(); saveState();
+        }
+      }
+    }, 1200);
+  }catch(e){
+    statusEl.textContent = '웹캠 접근 실패';
+    console.error(e);
+  }
+}
+
+// 제어 버튼
+applyBtn.addEventListener('click', ()=>{
+  curEye.textContent = thresholdEye.value;
+  curAngle.textContent = thresholdAngle.value;
+  curMove.textContent = movementMode.value === 'require' ? '필요' : '무시';
+  log('설정 저장됨');
+  saveState();
+});
+thresholdEye.addEventListener('input', ()=> valEye.textContent = thresholdEye.value);
+thresholdAngle.addEventListener('input', ()=> valAngle.textContent = thresholdAngle.value);
+temp.addEventListener('input', ()=> tempVal.textContent = temp.value);
+lux.addEventListener('input', ()=> luxVal.textContent = lux.value);
+
+startBtn.addEventListener('click', ()=>{
+  if(isRunning) return;
+  isRunning = true;
+  statusEl.textContent = '감지 실행 중...';
+  if(useSim.checked) simInterval = setInterval(simDetect, 2500);
+  if(useWebcam.checked) startWebcam();
+  renderTable(); initChart(); updateTop3();
+  log('감지 시작');
+});
+
+stopBtn.addEventListener('click', ()=>{
+  isRunning = false;
+  statusEl.textContent = '감지 정지';
+  clearInterval(simInterval); simInterval = null;
+  clearInterval(detectInterval); detectInterval = null;
+  // stop webcam tracks
+  try{ const s = video.srcObject; if(s) s.getTracks().forEach(t=>t.stop()); video.srcObject = null; }catch(e){}
+  ctxOverlay.clearRect(0,0,overlay.width,overlay.height);
+  log('감지 정지');
+});
+
+resetStats.addEventListener('click', ()=>{
+  studentState.forEach(s=> s.sleepCount = 0);
+  saveState();
+  renderTable(); initChart(); updateTop3();
+  log('통계 초기화됨');
+});
+
+// persist/load
+loadState();
+renderTable();
+initChart();
+updateTop3();
+
+// provide download link programmatically (user asked)
+// create blob and link
+function makeDownloadButton(){
+  const blob = new Blob([document.documentElement.outerHTML], {type:'text/html'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'index_smart_awake_desk.html';
+  a.textContent = '현재 페이지 HTML 다운로드';
+  a.style.display='inline-block'; a.style.marginTop='8px'; a.className='btn';
+  document.querySelector('footer').appendChild(a);
+}
+makeDownloadButton();
+
+</script>
+</body>
+</html>
