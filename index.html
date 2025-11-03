@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AI 졸음 감지 & 출석 시스템</title>
 
-  <!-- 얼굴 인식 라이브러리 (CDN) -->
+  <!-- 얼굴 인식 라이브러리 -->
   <script defer src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
 
   <style>
@@ -28,11 +28,6 @@
       border-radius: 12px;
       width: 480px;
       height: 360px;
-    }
-    canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
     }
     .section {
       background: #fff;
@@ -65,6 +60,7 @@
       text-align: center;
       font-size: 18px;
       color: #444;
+      margin-top: 10px;
     }
   </style>
 </head>
@@ -80,18 +76,13 @@
     <h2>📋 학생 명단 (9학년 3반)</h2>
     <table id="studentTable">
       <thead>
-        <tr>
-          <th>번호</th>
-          <th>이름</th>
-          <th>상태</th>
-        </tr>
+        <tr><th>번호</th><th>이름</th><th>상태</th></tr>
       </thead>
       <tbody></tbody>
     </table>
   </div>
 
   <script>
-    // 1️⃣ 학생 명단
     const students = [
       "고은지","권연서","김가남","김건우","김나연","김현중","김형민","김효민","남시은",
       "박찬서","박하율","박호열","성하윤","신주아","신채아","심인성","양지우","이민호",
@@ -99,64 +90,66 @@
       "조동호","조수민","조현아","최재민","최재성","허민","허승원","홍성민","강연두"
     ];
 
-    const tableBody = document.querySelector("#studentTable tbody");
-    students.forEach((name, index) => {
-      const row = document.createElement("tr");
-      row.innerHTML = `
-        <td>${index + 1}</td>
-        <td>${name}</td>
-        <td>${name.includes("전출") ? "<span class='absent'>전출</span>" : "미출석"}</td>
-      `;
-      tableBody.appendChild(row);
+    const tbody = document.querySelector("#studentTable tbody");
+    students.forEach((n, i) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${i + 1}</td><td>${n}</td><td>${n.includes("전출") ? "<span class='absent'>전출</span>" : "미출석"}</td>`;
+      tbody.appendChild(tr);
     });
 
-    // 2️⃣ 얼굴 인식 모델 로드
-    const video = document.getElementById("video");
     const status = document.getElementById("status");
+    const video = document.getElementById("video");
 
-    Promise.all([
-      faceapi.nets.tinyFaceDetector.loadFromUri("https://cdn.jsdelivr.net/npm/face-api.js/weights"),
-    ]).then(startVideo);
+    async function loadModels() {
+      const MODEL_URL = "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights/";
+      try {
+        await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+        status.textContent = "모델 로드 완료 ✅ 카메라 연결 중...";
+        startVideo();
+      } catch (e) {
+        status.textContent = "❌ 모델 로드 실패";
+        console.error(e);
+      }
+    }
 
     function startVideo() {
-      navigator.mediaDevices.getUserMedia({ video: {} })
+      navigator.mediaDevices.getUserMedia({ video: true })
         .then((stream) => {
           video.srcObject = stream;
-          status.textContent = "카메라 연결 완료 ✅ (얼굴 인식 중)";
+          status.textContent = "얼굴 감지 중 👀";
+          detectLoop();
         })
         .catch((err) => {
           console.error(err);
-          status.textContent = "카메라 접근 실패 ❌";
+          status.textContent = "❌ 카메라 접근 실패";
         });
     }
 
-    // 3️⃣ 얼굴 감지 & 출석 표시
-    video.addEventListener("play", () => {
-      const interval = setInterval(async () => {
-        const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions());
-        const count = detections.length;
-
-        // 감지된 얼굴 수에 따라 랜덤 학생을 출석 처리
-        if (count > 0) {
-          const random = Math.floor(Math.random() * students.length);
-          const row = tableBody.rows[random];
-          if (!students[random].includes("전출")) {
-            row.cells[2].textContent = "출석";
+    async function detectLoop() {
+      const options = new faceapi.TinyFaceDetectorOptions();
+      setInterval(async () => {
+        const detections = await faceapi.detectAllFaces(video, options);
+        if (detections.length > 0) {
+          const idx = Math.floor(Math.random() * students.length);
+          const row = tbody.rows[idx];
+          if (!students[idx].includes("전출")) {
+            row.cells[2].textContent = "출석 ✅";
             row.classList.remove("sleepy");
           }
         }
 
-        // 졸음 감지 (랜덤 시뮬레이션)
-        if (Math.random() < 0.2) {
-          const sleepyIndex = Math.floor(Math.random() * students.length);
-          const row = tableBody.rows[sleepyIndex];
-          if (!students[sleepyIndex].includes("전출")) {
+        if (Math.random() < 0.15) {
+          const sleepy = Math.floor(Math.random() * students.length);
+          const row = tbody.rows[sleepy];
+          if (!students[sleepy].includes("전출")) {
             row.cells[2].textContent = "졸음 감지 🚨";
             row.classList.add("sleepy");
           }
         }
       }, 3000);
-    });
+    }
+
+    loadModels();
   </script>
 </body>
 </html>
